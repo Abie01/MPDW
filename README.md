@@ -1,2 +1,2 @@
-# 069_mpdw
+# 069_MPDW
 Praktikum MPDW 2025
