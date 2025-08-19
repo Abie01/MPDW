@@ -1,2 +1,7 @@
+```{r}
 joshua = 1 + 0
 daffa = 0 + 1
+a = joshua + daffa
+a
+```
+
