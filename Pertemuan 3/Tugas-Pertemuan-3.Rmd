@@ -1,0 +1,399 @@
+---
+title: "Pertemuan 3 - Regresi dengan Peubah Lag"
+author: Abie Septian G1401231069
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+## *Packages*
+
+```{r, warning=F, message=F}
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+```
+
+## Impor Data
+
+```{r}
+aqnewdelhi <- read.csv("C:/Users/Abie/OneDrive/Documents/5/mpdw/NewDelhi_Air_quality.csv")
+str(aqnewdelhi)
+```
+
+## Subset Data
+
+```{r}
+aqnewdelhi<-aqnewdelhi[,c(1,2,5)]
+colnames(aqnewdelhi)<-c("t","Yt","Xt")
+aqnewdelhi
+```
+
+## Pembagian Data
+
+```{r}
+#SPLIT DATA
+train<-aqnewdelhi[1:58,]
+test<-aqnewdelhi[59:72,]
+```
+
+```{r}
+#data time series
+train.ts<-ts(train)
+test.ts<-ts(test)
+aqnewdelhi.ts<-ts(aqnewdelhi)
+```
+
+## Model Koyck
+
+$$
+y_t=a(1-\lambda)+\beta_0X_t+\beta_1Z_t+\lambda Y_{t-1}+V_t
+$$
+
+dengan $$V_t=u_t-\lambda u_{t-1}$$
+
+### Pemodelan
+
+```{r}
+# Model Koyck
+model.koyck <- koyckDlm(x = train$Xt, y = train$Yt)
+summary(model.koyck)
+
+# Ukuran Kebaikan Model
+AIC(model.koyck)
+BIC(model.koyck)
+```
+
+Dari hasil tersebut, didapat bahwa peubah $x_t$ (kadar NO2) memiliki nilai $P-Value<0.05$. Hal ini menunjukkan bahwa peubah kadar NO2 berpengaruh signifikan terhadap Indeks Kualitas Udara di New Delhi pada rentang waktu tersebut. Adapun model keseluruhannya adalah sebagai berikut
+
+$$
+\hat{Y_t}=1.99147+25.33442X_t+0.8802Y_{t-1}
+$$
+Model tersebut memiliki nilai:
+- Adj R²= 0.8178
+
+- AIC= 159.136
+
+- BIC= 167.3082
+
+### Peramalan dan Akurasi
+
+```{r}
+forec.koyck <- forecast(model = model.koyck, x=test$Xt, h=14)
+forec.koyck
+
+# Ukuran Kebaikan Model
+#akurasi data test
+mape.koyck <- MAPE(forec.koyck$forecasts, test$Yt)
+mape.koyck
+#akurasi data training
+GoF(model.koyck)
+```
+
+Berdasarkan hasil peramalan di atas, didapat bahwa nilai MAPE untuk data train sebesar 0.02% dan untuk data test sebesar0.09%. Hal ini menunjukkan bahwa model Koyck yang dibentuk merupakan model yang sangat baik karena memiliki nilai MAPE < 10%.
+
+## Model Distributed Lag
+
+### Pemodelan (Lag=2)
+
+```{r}
+model.dlm <- dlm(x = train$Xt,y = train$Yt , q = 2)
+summary(model.dlm)
+
+# Ukuran Kebaikan Model
+AIC(model.dlm)
+BIC(model.dlm)
+```
+
+Dari hasil diatas, didapat bahwa $P-value$ dari intercept dan $x_{t-2}$ (kadar NO2) $<0.05$. Hal ini menunjukkan bahwa intercept dan kadar NO2 di 2 periode sebelumnya berpengaruh signifikan terhadap Indeks Kualitas Udara di New Delhi. Adapun model keseluruhan yang terbentuk adalah sebagai berikut
+
+$$
+\hat{Y_t}=20.172+203.517X_t-291.196X_{t-1}+240.707X_{t-2}
+$$
+Model tersebut memiliki nilai:
+- Adj R²= 0.21
+
+- AIC= 239.9943
+
+- BIC= 250.121
+
+### Peramalan dan Akurasi
+
+```{r}
+forec.dlm <- forecast(model = model.dlm, x=test$Xt, h=14)
+forec.dlm
+
+#akurasi data test
+mape.dlm <- MAPE(forec.dlm$forecasts, test$Yt)
+mape.dlm
+#akurasi data training
+GoF(model.dlm)
+```
+
+Berdasarkan hasil peramalan di atas, didapat bahwa nilai MAPE untuk data train sebesar 0.05% dan untuk data test sebesar 0.13%. Hal ini menunjukkan bahwa model Koyck yang dibentuk merupakan model yang sangat baik karena memiliki nilai MAPE < 10%.
+
+### *Lag* Optimum
+Jika tadi lag ditentukan, maka pada bagian ini akan dicari lag optimum
+```{r}
+#penentuan lag optimum 
+finiteDLMauto(formula = Yt ~ Xt,
+              data = data.frame(train), q.min = 1, q.max = 8,
+              model.type = "dlm", error.type = "AIC", trace = TRUE)
+```
+
+Berdasarkan output tersebut, lag optimum dari rentang 1-8 didapatkan ketika lag=8. Selanjutnya dilakukan pemodelan untuk lag=8
+
+```{r}
+# Model dlm dengan lag optimum (=8)
+model.dlm2 <- dlm(x = train$Xt,y = train$Yt , q = 8)
+summary(model.dlm2)
+
+# Ukuran Kebaikan Model
+AIC(model.dlm2)
+BIC(model.dlm2)
+```
+
+Dari hasil diatas, didapat bahwa $P-value$ dari intercept dan $x_t$ (kadar NO2) $<0.05$. Hal ini menunjukkan bahwa intercept dan kadar NO2 di periode yang sama berpengaruh signifikan terhadap Indeks Kualitas Udara di New Delhi. Adapun model keseluruhan yang terbentuk adalah sebagai berikut
+
+$$
+\hat{Y_t}=14.158+253.711X_t-273.258X_{t-1}+218.193X_{t-2}-30.109X_{t-3}+37.238X_{t-4}-54.997X_{t-5}+70.591X_{t-6}-25.868X_{t-7}+96.723X_{t-8}
+$$
+Model tersebut memiliki nilai:
+- Adj R²= 0.3654
+
+- AIC= 211.3028
+
+- BIC= 232.335
+
+ketiga indikator menunjukan hasil yang lebih baik dibandingkan model sebelumnya ketika lag ditentukan (lag=2)
+
+
+Adapun hasil peramalan 14 periode kedepan menggunakan model tersebut adalah sebagai berikut
+
+```{r}
+#peramalan dan akurasi
+forec.dlm2 <- forecast(model = model.dlm2, x=test$Xt, h=14)
+
+#akurasi data test
+mape.dlm2<- MAPE(forec.dlm2$forecasts, test$Yt)
+mape.dlm2
+
+#akurasi data training
+GoF(model.dlm2)
+```
+
+Berdasarkan hasil peramalan di atas, didapat bahwa nilai MAPE untuk data train sebesar 0.05% dan untuk data test sebesar 0.11%. Hal ini menunjukkan bahwa model Koyck yang dibentuk merupakan model yang sangat baik karena memiliki nilai MAPE < 10%.
+
+## Model Autoregressive
+
+### Pemodelan
+
+```{r}
+model.ardl <- ardlDlm(formula = Yt ~ Xt, 
+                         data = train,p = 1 , q = 1)
+summary(model.ardl)
+```
+
+Hasil di atas menunjukkan bahwa selain peubah $y_{t-1}$, hasil uji t menunjukkan nilai-p pada peubah $\ge0.05$ Hal ini menunjukkan bahwa peubah Indeks Kualitas Udara di New Delhi dipengaruhi oleh dirinya sendiri pada periode sebelumnya. Adapun model keseluruhan yang terbentuk adalah sebagai berikut
+
+$$
+\hat{Y}=1.86844+52.28983X_t-24.90414X_{t-1}+0.88147Y_{t-1}
+$$
+
+Model tersebut memiliki nilai:
+- Adj R²= 0.8162
+
+- AIC= 160.566
+
+- BIC= 170.7813
+
+
+### Peramalan dan Akurasi
+
+```{r}
+forec.ardl <- forecast(model = model.ardl, x=test$Xt, h=14)
+forec.ardl
+
+#akurasi data test
+mape.ardl <- MAPE(forec.ardl$forecasts, test$Yt)
+mape.ardl
+
+#akurasi data training
+GoF(model.ardl)
+```
+
+Berdasarkan akurasi di atas, terlihat bahwa nilai MAPE keduanya tidak jauh berbeda dan juga < 10%. Artinya, model regresi dengan distribusi lag ini tidak `overfitted` atau `underfitted`
+
+### *Lag* Optimum
+
+```{r}
+#penentuan lag optimum
+model.ardl.opt <- ardlBoundOrders(data = data.frame(aqnewdelhi), ic = "AIC", 
+                                  formula = Yt ~ Xt )
+model.ardl.opt
+min_p=c()
+```
+
+```{r}
+for(i in 1:15){
+  min_p[i]=min(model.ardl.opt$Stat.table[[i]])
+}
+q_opt=which(min_p==min(min_p, na.rm = TRUE))
+p_opt=which(model.ardl.opt$Stat.table[[q_opt]] == 
+              min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+data.frame("q_optimum" = q_opt, "p_optimum" = p_opt, 
+           "AIC"=model.ardl.opt$min.Stat)
+```
+
+Dari tabel di atas, dapat terlihat bahwa nilai AIC terendah didapat ketika $p=14$ dan $q=6$, yaitu sebesar `133,8784`. Artinya, model autoregressive optimum didapat ketika $p=14$ dan $q=6$
+
+Selanjutnya dapat dilakukan pemodelan dengan nilai $p$ dan $q$ optimum seperti inisialisasi di langkah sebelumnya.
+```{r}
+model.ardl2 <- ardlDlm(formula = Yt ~ Xt, 
+                         data = train,p = 6 , q = 14)
+summary(model.ardl2)
+```
+Berikut adalah ringkasan hasil estimasi dari model ARDL dengan p=6 dan q=14. Terlihat hanya satu peubah yang siginifikan yaitu $Y_{t-1}$, sama seperti sebelumnya, hanya saja ukuran kebaikan modelnya (R², AIC, BIC) lebih baik dibandingkan model ARDL sebelumnya (p=1, q=1).
+
+Adapun hasil peramalan 14 periode kedepan menggunakan model tersebut adalah sebagai berikut
+
+```{r}
+#peramalan dan akurasi
+forec.ardl2 <- forecast(model = model.ardl2, x=test$Xt, h=14)
+
+#akurasi data test
+mape.ardl2<- MAPE(forec.ardl2$forecasts, test$Yt)
+mape.ardl2
+
+#akurasi data training
+GoF(model.ardl2)
+```
+
+Berdasarkan hasil peramalan di atas, didapat bahwa nilai MAPE untuk data train sebesar 0.01% dan untuk data test sebesar 0.8%. Hal ini menunjukkan bahwa model Koyck yang dibentuk merupakan model yang sangat baik karena memiliki nilai MAPE < 10%.
+
+## Pemodelan DLM & ARDL dengan Library `dynlm`
+
+`L(Xt)`= Xt pada periode sebelumnya (lag ke-1).
+
+`L(Xt, 2)` = Xt pada dua periode sebelumnya (lag ke-2).
+
+```{r}
+# Model koyck
+cons_lm1 <- dynlm(Yt ~ Xt+L(Yt),data = train.ts)
+
+# Model dlm
+cons_lm2 <- dynlm(Yt ~ Xt+L(Xt)+L(Xt,2),data = train.ts)
+
+# Model dlm2
+cons_lm3 <- dynlm(Yt ~ Xt+L(Xt)+L(Xt,2)+L(Xt,3)+L(Xt,4)+L(Xt,5)+L(Xt,6)+L(Xt,7)+L(Xt,8),data = train.ts)
+
+# Model ardl
+cons_lm4 <- dynlm(Yt ~ Xt+L(Xt)+L(Yt),data = train.ts)
+
+# Model ardl2
+cons_lm5 <- dynlm(Yt ~ Xt+L(Xt)+L(Xt,2)+L(Xt,3)+L(Xt,4)+L(Xt,5)+L(Xt,6)+L(Yt)+L(Yt,2)+L(Yt,3)+L(Yt,4)+L(Yt,5)+L(Yt,6)+L(Yt,7)+L(Yt,8)+L(Yt,9)+L(Yt,10)+L(Yt,11)+L(Yt,12)+L(Yt,13)+L(Yt,14),data = train.ts)
+```
+
+### Ringkasan Model
+
+Berikut adalah ringkasan hasil estimasi dari masing-masing model:
+
+```{r}
+summary(cons_lm1)
+summary(cons_lm2)
+summary(cons_lm3)
+summary(cons_lm4)
+summary(cons_lm5)
+```
+
+### SSE
+
+Selain ringkasan hasil, kita juga bisa menghitung nilai SSE dari masing-masing model.
+
+```{r}
+deviance(cons_lm1)
+deviance(cons_lm2)
+deviance(cons_lm3)
+deviance(cons_lm4)
+deviance(cons_lm5)
+```
+Dari kelima model, mode dengan SSE terbaik adalah model ardl dengan p=6 dan q=14 (cons_lm5) dengan nilai SSE sebesar 11.04087.
+
+### Uji Asumsi Klasik
+#### Uji Autokorelasi
+
+```{r}
+#durbin watson
+dwtest(cons_lm1)
+dwtest(cons_lm2)
+dwtest(cons_lm3)
+dwtest(cons_lm4)
+dwtest(cons_lm5)
+```
+Model yang tidak melanggar asumsi autokorelasi adalah model ardl dengan p=6 dan q=14 karena memiliki nilai p-value > 0.05.
+
+#### Uji Heterogenitas
+
+```{r}
+bptest(cons_lm1)
+bptest(cons_lm2)
+bptest(cons_lm3)
+bptest(cons_lm4)
+bptest(cons_lm5)
+```
+Semua model tidak melanggar asumsi heteroskedastisitas karena memiliki nilai p-value > 0.05.
+
+
+#### Uji Normalitas
+
+
+```{r}
+shapiro.test(residuals(cons_lm1))
+shapiro.test(residuals(cons_lm2))
+shapiro.test(residuals(cons_lm3))
+shapiro.test(residuals(cons_lm4))
+shapiro.test(residuals(cons_lm5))
+```
+
+Semua model tidak melanggar asumsi normalitas karena memiliki nilai p-value > 0.05.
+
+## Perbandingan Model
+
+```{r}
+akurasi <- matrix(c(mape.koyck, mape.dlm, mape.dlm2, mape.ardl, mape.ardl2))
+row.names(akurasi)<- c("Koyck","DLM 1","DLM 2","Autoregressive 1", "Autoregressive 2")
+colnames(akurasi) <- c("MAPE")
+akurasi
+```
+
+Berdasarkan nilai MAPE, model paling optimum didapat pada Model Autoreeggresive 1 karena memiliki nilai MAPE yang terkecil. Namun, jika dilihat dari hasil uji asumsi klasik, model tersebut melanggar asumsi autokorelasi. Oleh karena itu, model yang paling baik adalah model Autoregressive 2 (p=6, q=14) karena memiliki nilai MAPE yang cukup kecil dan tidak melanggar asumsi klasik.
+
+### Plot
+
+Untuk membandingkan hasil peramalan dari berbagai model (Koyck, DLM 1, DLM 2, ARDL 1, dan ARDL 2) dengan data aktual, dibuat grafik garis. Visualisasi ini membantu melihat seberapa dekat hasil ramalan tiap model dengan nilai aktual.
+
+```{r}
+par(mfrow=c(1,1))  # atur layout grafik tunggal
+
+# plot data aktual
+plot(test$Xt, test$Yt, type="b", col="black")
+
+# tambahkan garis ramalan dari masing-masing model
+points(test$Xt, forec.koyck$forecasts, col="red");   lines(test$Xt, forec.koyck$forecasts, col="red")
+points(test$Xt, forec.dlm$forecasts, col="blue");    lines(test$Xt, forec.dlm$forecasts, col="blue")
+points(test$Xt, forec.dlm2$forecasts, col="orange"); lines(test$Xt, forec.dlm2$forecasts, col="orange")
+points(test$Xt, forec.ardl$forecasts, col="green");  lines(test$Xt, forec.ardl$forecasts, col="green")
+points(test$Xt, forec.ardl2$forecasts, col="purple"); lines(test$Xt, forec.ardl2$forecasts, col="purple")
+# legenda model
+legend("topleft",
+       c("Aktual", "Koyck","DLM 1","DLM 2", "Autoregressive 1", "Autoregressive 2"),
+       lty=1, col=c("black","red","blue","orange","green","purple"), cex=0.8)
+```
+
+Berdasarkan plot perbandingan, terlihat bahwa semua model mampu mengikuti tren data aktual, meskipun dengan tingkat kedekatan yang berbeda. Pada model DLM 1 meskipun nilai awalnya terlihat jauh dari data aktual, namun pada periode berikutnya model tersebut mampu mengikuti tren data aktual dengan baik. Model Koyck, DLM 2, dan autoregressive 1 menunjukkan pola yang mirip, tetapi tidak sebaik DLM 1 pada periode akhir, sementara model autoregressive 2 cukup dekat di awal periode namun kemudian menjadi yang paling jauh jaraknya di periode akhir. Secara keseluruhan, DLM 1 tampak paling konsisten dalam mengikuti tren data aktual dibandingkan model lainnya. Namun, perlu diingat bahwa penilaian akhir terhadap model terbaik harus mempertimbangkan tidak hanya visualisasi, tetapi juga metrik evaluasi seperti MAPE dan hasil uji asumsi klasik yang sudah dibahas sebelumnya.
