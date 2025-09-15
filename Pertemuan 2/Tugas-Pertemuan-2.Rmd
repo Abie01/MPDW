@@ -1,0 +1,335 @@
+---
+title: "MPDW 3 - Regresi Linier Sederhana"
+author: "Abie"
+date: "2025-08-28"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+# Persiapan
+```{r}
+library(TTR)
+library(lmtest)
+library(dplyr)
+library(readxl)
+library(forecast)
+library(orcutt)
+library(HoRM)
+library(ggplot2)
+```
+
+
+# Data Bojonegoro
+```{r}
+# Input Data
+bjn <- read_xlsx("C:/Users/Abie/OneDrive/Documents/5/mpdw/ipm bojonegoro.xlsx")
+bjn
+
+# Konversi ke time series
+bjngr<-ts(bjn$ipm, start=2010)
+bjngr
+```
+
+# Eksplorasi data
+```{r}
+# Plot time series
+ts.plot(bjngr, main="Time Series IPM Bojonegoro", ylab="IPM", xlab="Tahun", col="blue", lwd=2)
+
+
+```
+Dari plot di atas, terlihat bahwa IPM Bojonegoro menunjukkan tren meningkat dari tahun 2010 hingga 2024. Secara keseluruhan, tren jangka panjang menunjukkan peningkatan yang konsisten dalam IPM Bojonegoro selama periode tersebut sehingga pola dari data ini adalah pola tren. Untuk itu, selanjutnya akan dilakukan ramalan dan pemulusan dengan metode DMA dan DES karena terlihat pada plot di atas
+
+## DMA
+```{r}
+bjngr.sma <- SMA(bjngr, n=3)
+dma <- SMA(bjngr.sma, n=3)
+At <- 2*bjngr.sma - dma
+Bt <- 2/(3-1)*(bjngr.sma - dma)
+bjngr.dma<- At+Bt
+bjngr.ramal<- c(NA, bjngr.dma)
+
+t = 1:5
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+```
+
+```{r}
+bjngr.gab <- cbind(aktual = c(bjngr,rep(NA,5)), 
+                pemulusan1 = c(bjngr.sma,rep(NA,5)),
+                pemulusan2 = c(bjngr.dma, rep(NA,5)),
+                At = c(At, rep(NA,5)), 
+                Bt = c(Bt,rep(NA,5)),
+                ramalan = c(bjngr.ramal, f[-1]))
+bjngr.gab
+
+#Plot time series
+ts.plot(bjngr.gab[,1], xlab="Time Period ", ylab="IPM", 
+        main= "DMA N=3 Data IPM Bojonegoro", ylim=c(62,76))
+points(bjngr.gab[,1])
+points(bjngr.gab[,3])
+points(bjngr.gab[,6])
+lines(bjngr.gab[,3],col="gold",lwd=2)
+lines(bjngr.gab[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), 
+       lty=8, col=c("black","gold","red"), cex=0.8)
+```
+Dari plot di atas, terlihat bahwa metode DMA dengan N=3 memberikan hasil pemulusan yang cukup baik dalam mengikuti tren data IPM Bojonegoro. Garis pemulusan (warna emas) mendekati data aktual (warna hitam) dengan fluktuasi yang lebih halus. Selain itu, peramalan (warna merah) menunjukkan tren kenaikan yang konsisten, sesuai dengan pola data historis. Hal ini menunjukkan bahwa metode DMA memberikan prediksi yang masuk akal untuk periode mendatang.
+
+```{r}
+#Menghitung nilai keakuratan
+error.dma = bjngr-bjngr.ramal[1:length(bjngr)]
+SSE.dma = sum(error.dma[6:length(bjngr)]^2)
+MSE.dma = mean(error.dma[6:length(bjngr)]^2)
+MAPE.dma = mean(abs((error.dma[6:length(bjngr)]/bjngr[6:length(bjngr)])*100))
+
+akurasi.dma <- matrix(c(SSE.dma, MSE.dma, MAPE.dma))
+row.names(akurasi.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi.dma) <- c("Akurasi m = 3")
+akurasi.dma
+```
+Namun MAPE yang dihasilkan masih besar yaitu sekitar 28%, sehingga akan dicoba metode lain yaitu DES
+
+## DES
+```{r}
+#membagi training dan testing (80:20)
+training<-bjn[1:12,]
+testing<-bjn[12:15,]
+
+#data time series
+training.ts<-ts(training[,2])
+testing.ts<-ts(testing[,2],start=11)
+
+#eksplorasi data
+ggplot() + 
+  geom_line(data = training, aes(x = tahun, y = ipm, col = "Data Train")) +
+  geom_line(data = testing, aes(x = tahun, y = ipm, col = "Data Test")) +
+  labs(x = "Periode Waktu", y = "IPM", color = "Legend") +
+   scale_colour_manual(name="Keterangan:", breaks = c("Data Train", "Data Test"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+```{r}
+des.opt<- HoltWinters(training.ts, gamma = FALSE)
+des.opt
+```
+Didapatkan nilai alpha optimal sebesar 0.699 dan beta sebesar 0.708.
+
+```{r}
+plot(des.opt)
+legend("topleft", c("Data Aktual", "Peramalan"), col = c("black", "red"), 
+       lty = c(1,1))
+
+#ramalan
+ramalandesopt<- forecast(des.opt, h=5)
+ramalandesopt
+```
+```{r}
+#Menghitung nilai keakuratan
+#data training
+ssedes.train<-des.opt$SSE
+msedes.train<-ssedes.train/length(training.ts)
+sisaandes<-ramalandesopt$residuals
+head(sisaandes)
+
+mapedes.train <- sum(abs(sisaandes[3:length(training.ts)]/training.ts[3:length(training.ts)])*100)/length(training.ts[3:12])
+
+akurasides.opt <- matrix(c(ssedes.train,msedes.train,mapedes.train))
+row.names(akurasides.opt)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.opt) <- c("Akurasi lamda dan gamma optimum")
+akurasides.opt
+
+#data testing
+selisihdesopt<-ramalandesopt$mean-testing.ts
+selisihdesopt
+
+SSEtestingdesopt<-sum(selisihdesopt^2)
+SSEtestingdesopt<-SSEtestingdesopt/length(testing.ts)
+MAPEtestingdesopt<-sum(abs(selisihdesopt/testing.ts)*100)/length(testing.ts)
+
+akurasiDesTesting <- matrix(c(SSEtestingdesopt,SSEtestingdesopt,MAPEtestingdesopt))
+row.names(akurasiDesTesting)<- c("SSE", "MSE", "MAPE")
+colnames(akurasiDesTesting) <- c("Akurasi lamda dan gamma optimum")
+akurasiDesTesting
+```
+```{r}
+#perbandingan akurasi
+cbind(akurasi.dma, akurasides.opt)
+```
+
+Dari hasil di atas, terlihat bahwa metode DES dengan parameter alpha dan beta optimal memberikan hasil yang tidak lebih baik dibandingkan dengan metode DMA pada data train. Nilai MAPE pada data training sekitar 31%.
+
+```{r}
+#scatter plot ipm vs tahun
+ggplot(bjn, aes(x = tahun, y = ipm)) +
+  geom_point(color = "blue", size = 3) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Scatter Plot IPM vs Tahun",
+       x = "Tahun",
+       y = "IPM") +
+  theme_minimal()
+
+#korelasi
+cor(bjn$tahun, bjn$ipm)
+```
+terlihat jelas terdapat korelasi positif antara tahun dan ipm dengan nilai korelasi sebesar 0.996, sehingga akan dilakukan regresi linier sederhana.
+
+# Regresi Linier Sederhana
+```{r}
+regbjn <- lm(ipm ~ tahun, data = bjn)
+summary(regbjn)
+```
+model yang dihasilkan:
+$$
+y_i = -1223 + 0.639x_i
+$$
+Hasil uji F menunjukkan p-value < 0.05, begitu juga uji t pada intersep dan penduga yang menunjukkan nilai p-value < 0.05 artinya model ini signifikan pada taraf nyata 5% dengan $R^2$ = 0.9938 yang berarti sebesar 99.38% keragaman IPM dapat dijelaskan oleh nilai peubah tahun. Setelah ini akan diperiksa asumsi-asumsi yang diperlukan
+
+# Uji Asumsi Grafik 
+## Homokedastisitas
+### Grafik residual vs fitted
+```{r}
+plot(regbjn, 1, main = "Plot Residual vs Fitted")
+```
+## Normalitas
+### Grafik QQ plot
+```{r}
+plot(regbjn, 2, main = "Normal Q-Q Plot")
+```
+
+## Autokorelasi
+### Grafik residual vs order
+```{r}
+plot(residuals(regbjn), type = "o", main = "Plot Residual vs Urutan", xlab = "Urutan", ylab = "Residuals")
+```
+### plot acf
+```{r}
+acf(residuals(regbjn), main = "ACF of Residuals")
+```
+### pacf
+```{r}
+pacf(residuals(regbjn), main = "PACF of Residuals")
+```
+
+# Uji Asumsi Statistik
+## Uji Normalitas
+```{r}
+shapiro.test(residuals(regbjn))
+```
+## Uji Homokedastisitas
+```{r}
+bptest(regbjn)
+```
+## Uji Autokorelasi
+```{r}
+dwtest(regbjn)
+```
+Terdapat pelanggaran pada asumsi autokorelasi, artinya sisaan menunjukkan korelasi dengan sisaan pada periode sebelumnya. Oleh karena itu, akan dilakukan regresi ulang dengan metode Cochrane-Orcutt dan Hildreth-Lu
+
+# Regresi Cochrane-Orcutt
+```{r}
+regbjn.co <- cochrane.orcutt(regbjn)
+regbjn.co
+rho = regbjn.co$rho
+```
+Output model yang dihasilkan adalah:
+$$
+y_i=-1176.02+0.616x_i
+$$
+nilai p-value > 0.05, artinya belum cukup bukti menyatakan bahwa sisaan terdapat autokorelasi pada taraf nyata 5%. Untuk nilai $\rho$ optimum yang digunakan adalah 0.2956. 
+
+Selanjutnya akan dilakukan transformasi secara manual
+```{r}
+ipm.trans <- bjn$ipm[-1]-rho*bjn$ipm[-length(bjn$ipm)]
+tahun.trans <- bjn$tahun[-1]-rho*bjn$tahun[-length(bjn$tahun)]
+modelCOmanual <- lm(ipm.trans~tahun.trans)
+summary(modelCOmanual)
+```
+Hasil model transformasi bukan merupakan model sesungguhnya. Koefisien regresi masih perlu dicari kembali mengikuti $\beta_0^*=\beta_0+\rho\beta_0$ dan $\beta_1^*=\beta_1$.
+```{r}
+b0.co <- coef(modelCOmanual)[1]/(1-rho)
+b1.co <- coef(modelCOmanual)[2]
+b0.co
+b1.co
+```
+model regresi sudah sesuai dengan regbjn cochrane-orcutt dengan packages.
+
+# Regresi Hildreth-Lu
+```{r}
+hildreth.lu.func<- function(r, model){
+  x <- model.matrix(regbjn)[,-1]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t]-r*y[t-1]
+  x <- x[t]-r*x[t-1]
+  
+  return(lm(y~x))
+}
+
+#Pencariab rho yang meminimumkan SSE
+r <- c(seq(0.1,0.9, by= 0.1))
+tab <- data.frame("rho" = r, "SSE" = sapply(r, function(i){deviance(hildreth.lu.func(i, regbjn))}))
+round(tab, 4)
+```
+SSE minimum pada rentang 0.2 - 0.3 sehingga akan dicari lagi pada rentang tersebut dengan interval 0.001.
+
+```{r}
+rOpt <- seq(0.2,0.3, by= 0.001)
+tabOpt <- data.frame("rho" = rOpt, "SSE" = sapply(rOpt, function(i){deviance(hildreth.lu.func(i, regbjn))}))
+head(tabOpt[order(tabOpt$SSE),])
+```
+
+SSE minimum terlihat pada $\rho=0.296$. Akan dilihat pada grafik berikut
+```{r}
+par(mfrow = c(1,1))
+plot(tab$SSE ~ tab$rho , type = "l", xlab = "Rho", ylab = "SSE")
+abline(v = tabOpt[tabOpt$SSE==min(tabOpt$SSE),"rho"], lty = 2, col="red",lwd=2)
+text(x=0.296, y=0.284, labels = "rho=0.296", cex = 0.8)
+```
+Hasil perhitungan dan grafik menunjukan hasil yang konsisten dengan nilai $\rho$ optimum sebesar 0.296. Selanjutnya, model dapat didapatkan dengan mengevaluasi nilai $\rho$ ke dalam fungsi hildreth.lu, serta dilanjutkan dengan pengujian autokorelasi dengan uji Durbin-Watson. Namun, setelah pengecekan tersebut tidak lupa koefisien regresi tersebut digunakan untuk transformasi balik. Persamaan hasil transformasi itulah yang menjadi persamaan sesungguhnya.
+
+```{r}
+modelHL <- hildreth.lu.func(0.296, regbjn)
+summary(modelHL)
+```
+
+```{r}
+dwtest(modelHL)
+```
+Hasil pada model Hidreth-Lu menunjukkan p-value > 0.05, artinya belum cukup bukti menyatakan bahwa sisaan terdapat autokorelasi pada taraf nyata 5% sehingga asumsi amatan saling bebas terpenuhi.
+
+```{r}
+cat("y = ", coef(modelHL)[1]/(1-0.341), "+", coef(modelHL)[2],"x", sep = "")
+```
+Didapatkan model:
+$$
+y_i = -1256.305 + 0.6164x_i
+$$
+
+# Kesimpulan
+Berdasarkan hasil analisis regresi linier sederhana pada data IPM Bojonegoro, diperoleh model regresi yang masih melanggar asumsi autokorelasi sehingga perlu ditangani dengan metode Cochrane-Orcutt dan Hidrathe-Lu. Hasil kedua metode tersebut sudah tidak lagi melanggar asumsi adanya autokorelasi sehingga model regresinya valid.
+
+Adapun perbandingan antara ketiga metode tersebut sebagai berikut:
+```{r}
+ssemodelawal <- anova(regbjn)$`Sum Sq`[-1]
+ssemodelCO <- anova(modelCOmanual)$`Sum Sq`[-1]
+ssemodelHL <- anova(modelHL)$`Sum Sq`[-1]
+msemodelawal <- ssemodelawal/length(bjn$ipm)
+msemodelCO <- ssemodelCO/length(bjn$ipm)
+msemodelHL <- ssemodelHL/length(bjn$ipm)
+akurasi <- matrix(c(ssemodelawal,msemodelawal,ssemodelCO,msemodelCO,ssemodelHL,
+                    msemodelHL),nrow=3,ncol=2,byrow = T)
+colnames(akurasi) <- c("SSE","MSE")
+row.names(akurasi) <- c("model Awal", "model Cochrane-Orcutt", "model Hildreth-Lu")
+akurasi
+```
+
+Dari hasil di atas, terlihat bahwa metode Cochrane-Orcutt dan Hildreth-Lu memberikan hasil yang lebih baik dibandingkan model awal, dengan nilai SSE dan MSE yang lebih rendah. Hal ini menunjukkan bahwa penanganan autokorelasi pada model regresi linier sederhana dapat meningkatkan akurasi model dalam menjelaskan variabilitas data IPM Bojonegoro.

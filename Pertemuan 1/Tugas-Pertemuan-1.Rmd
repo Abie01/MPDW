@@ -1,0 +1,318 @@
+---
+title: "Tugas-Pertemuan-2"
+author: "Abie G1401231069"
+date: "2025-08-31"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+
+---
+
+```{r, message=FALSE, warning=FALSE}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+library("rio")
+library("ggplot2")
+```
+
+# Data
+```{r}
+dataaqi<-read.csv("C:\\Users\\Abie\\OneDrive\\Documents\\5\\mpdw\\dataudarajkt.csv")
+dataaqi<-dataaqi[1:125,c(1,4)] # Periode 1 sampai 125
+dataaqi$periode<-seq(125)
+dataaqi<-dataaqi[,c("periode","tanggal","pm10")]
+head(dataaqi)
+```
+
+Data yang digunakan adalah data kualitas udara, dengan peubah yang ditinjau adalah pm10 yaitu konsentrasi partikulat dengan diameter 10 mikrometer atau lebih kecil. Data ini diambil dari situs kaggle.com. Terdpat 125 data dari tanggal 18 Oktober 2024 sampai 28 Februrari 2025 yang menjadi observasi.
+
+
+```{r}
+dataaqi.ts<-ts(dataaqi$pm10)
+summary(dataaqi.ts)
+ts.plot(dataaqi.ts, xlab="Periode Waktu", ylab="PM10")
+```
+
+Dari plot di atas, dapat dilihat bahwa data pm10 memiliki pola kecenderungan turun di periode-periode awal, kemudian sedikit stabil di periode-periode setelahnya.
+
+## Data Train dan Test
+```{r}
+n_train <- floor(0.8 * length(dataaqi.ts))
+n_test <- length(dataaqi.ts) - n_train
+
+# Masih bentuk data frame
+training.ts <- dataaqi[1:n_train,]
+testing.ts <- dataaqi[(n_train + 1):length(dataaqi.ts),]
+
+# Bentuk data time series
+train.ts <- ts(training.ts$pm10)
+test.ts <- ts(testing.ts$pm10)
+
+ggplot() + 
+  geom_line(data = training.ts, aes(x = periode, y = pm10, col = "Data Train")) +
+  geom_line(data = testing.ts, aes(x = periode, y = pm10, col = "Data Test")) +
+  labs(x = "Periode Waktu", y = "Konsentrasi PM10", color = "Legend") +
+   scale_colour_manual(name="Keterangan:", breaks = c("Data Train", "Data Test"),
+                      values = c("blue", "red")) + 
+  theme_bw() + theme(legend.position = "bottom",
+                     plot.caption = element_text(hjust=0.5, size=12))
+```
+
+Data dibagi dengan proporsi 80% untuk data train (100 data) dan 20% untuk data test (25 data). Dari plot di atas, dapat dilihat bahwa data train memiliki pola yang mirip dengan data keseluruhan, yaitu kecenderungan turun di periode-periode awal, kemudian sedikit stabil di periode-periode setelahnya.
+
+# Single Moving Average
+## Pemulusan dan Peramalan dengan SMA n=5
+```{r}
+data.sma <- SMA(train.ts, n = 5)
+data.ramal1 <- c(NA,data.sma)
+data.gab1 <- cbind(
+  aktual =  c(dataaqi.ts),
+  pemulusan = c(data.sma,rep(NA,25)),
+  peramalan = c(data.ramal1,rep(data.ramal1[length(data.ramal1)],24)))
+data.gab1
+```
+
+## Visualisasi Data Aktual, Pemulusan, dan Peramalan
+```{r}
+ts.plot(dataaqi.ts, xlab="Periode Waktu", ylab="Konsentrasi PM10", main= "SMA N=4 Data Kualitas Udara Jakarta")
+points(dataaqi.ts)
+lines(data.gab1[,2],col="green",lwd=2)
+lines(data.gab1[,3],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.5)
+```
+Dari hasil plot single moving average di atas, dapat dilihat bahwa data pemulusan (hijau) mengikuti pola data aktual (hitam) dengan lebih halus. Sedangkan data peramalan (merah) cenderung datar karena menggunakan nilai pemulusan terakhir untuk meramalkan periode-periode berikutnya. Peramalan data berada di nilai 30.8.
+
+## Akurasi Data Train
+```{r}
+errortrainsma <- train.ts - data.gab1[1:n_train,3]
+
+SSEtrainsma <- sum(errortrainsma[6:length(errortrainsma)]^2)
+MSEtrainsma <- mean(errortrainsma[6:length(errortrainsma)]^2)
+MAPEtrainsma <- mean(abs(errortrainsma[6:length(errortrainsma)]/train.ts[6:length(errortrainsma)])*100)
+
+akurasitrainsma <- matrix(c(SSEtrainsma, MSEtrainsma, MAPEtrainsma))
+rownames(akurasitrainsma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasitrainsma) <- c("Akurasi Data Train n=5")
+akurasitrainsma
+```
+Akurasi data train dihitung mulai dari periode ke-6 karena pada periode 1 sampai 5, nilai pemulusan bergerak (SMA) adalah NA (Not Available). Hasilnya menunjukkan bahwa model SMA dengan n=5 menghasilkan kualitas yang kurang baik, bisa dilihat dari MAPE nya yang jauh di atas 10%
+
+## Akurasi Data Test
+```{r}
+errortestsma <- test.ts - data.gab1[101:125,3]
+errortestsma
+
+SSEtestsma <- sum(errortestsma^2)
+MSEtestsma <- mean(errortestsma^2)
+MAPEtestsma <- mean(abs(errortestsma/test.ts)*100)
+
+akurasitestsma <- matrix(c(SSEtestsma, MSEtestsma, MAPEtestsma))
+rownames(akurasitestsma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasitestsma) <- c("Akurasi Data Test n=5")
+akurasitestsma
+```
+Akurasi data test menunjukkan hasil yang kurang baik, bisa dilihat dari MAPE nya yang jauh di atas 10% juga lebih tinggui dibandingkan MAPE data train.
+
+# Double Moving Average
+## Pemulusan dan Peramalan dengan DMA n=5
+```{r}
+dma <- SMA(data.sma, n = 5)
+
+At <- 2 * data.sma - dma
+Bt <- (2 / (5 - 1)) * (data.sma - dma)
+
+data.dma <- At + Bt # Ini cuma cover sebanyak 100 periode (data train)
+
+data.ramal2 <- c(NA, data.dma) 
+
+f = c()
+
+# Untuk nilai peramalan 25 periode ke depan (data test)
+for (i in 1:25) {
+  f[i] = At[length(At)] + i * Bt[length(Bt)]
+}
+
+data.gab2 <- cbind(
+  aktual =  c(dataaqi.ts),
+  pemulusan1 = c(data.sma,rep(NA,25)),
+  pemulusan2 = c(dma,rep(NA,25)),
+  At = c(At,rep(NA,25)),
+  Bt = c(Bt,rep(NA,25)),
+  peramalan = c(data.ramal2, f[-1]))
+data.gab2
+```
+
+## Visualisasi Data Aktual, Pemulusan, dan Peramalan
+```{r}
+ts.plot(dataaqi.ts, xlab="Periode Waktu", ylab="Konsentrasi PM10", main= "DMA N=5 Data Kualitas Udara Jakarta")
+points(dataaqi.ts)
+lines(data.gab2[,3],col="blue",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","blue","red"), cex=0.5)
+
+```
+Hasil plot double moving average di atas menunjukkan bahwa data pemulusan (biru) mengikuti pola data aktual (hitam) dengan lebih halus dibandingkan SMA. Sedangkan data peramalan (merah) menunjukkan tren yang lebih dinamis karena mempertimbangkan komponen tren dari data. Peramalan data terlihat lebih mirip ke kondisi aktualnya dibanding single moving average.
+
+## Akurasi Data Train
+```{r}
+errortraindma <- train.ts - data.gab2[1:n_train,6]
+SSEtraindma <- sum(errortraindma[10:length(errortraindma)]^2)
+MSEtraindma <- mean(errortraindma[10:length(errortraindma)]^2)
+MAPEtraindma <- mean(abs(errortraindma[10:length(errortraindma)]/train.ts[10:length(errortraindma)])*100)
+
+akurasitraindma <- matrix(c(SSEtraindma, MSEtraindma, MAPEtraindma))
+rownames(akurasitraindma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasitraindma) <- c("Akurasi Data Train n=5")
+akurasitraindma
+```
+Akurasi data train dihitung mulai dari periode ke-10 karena pada periode 1 sampai 9, nilai pemulusan ganda (DMA) adalah NA (Not Available). Hasilnya menunjukkan bahwa model DMA dengan n=5 menghasilkan kualitas yang masih belum lebih baik dibanding SMA, bisa dilihat dari MAPE nya yang lebih tinggi yaitu sekitar 25%.
+
+## Akurasi Data Test
+```{r}
+errortestdma <- test.ts - data.gab2[101:125,6]
+SSEtestdma <- sum(errortestdma^2)
+MSEtestdma <- mean(errortestdma^2)
+MAPEtestdma <- mean(abs(errortestdma/test.ts)*100)
+
+akurasitestdma <- matrix(c(SSEtestdma, MSEtestdma, MAPEtestdma))
+rownames(akurasitestdma) <- c("SSE", "MSE", "MAPE")
+colnames(akurasitestdma) <- c("Akurasi Data Test n=5")
+akurasitestdma
+```
+Begitu pula dengan akurasi data test yang menunjukkan hasil yang kurang baik, bisa dilihat dari MAPE nya yang jauh di atas 10% juga lebih tinggi dibandingkan MAPE data train.
+
+# Single Exponential Smoothing
+## Pemulusan dan Peramalan dengan SES alpha optimum
+### Fungsi SES
+```{r}
+data.ses <- ses(train.ts, alpha = NULL, h = 25)
+data.ses
+```
+Berikut adalah hasil pemulusan dan peramalan dengan single exponential smoothing (SES) menggunakan alpha optimum yang diperoleh dari fungsi ses(). Diperoleh nilai tengah peramalan berada di angka 37.22.
+
+### Fungsi HoltWinters
+```{r}
+data.sesh <- HoltWinters(train.ts, alpha = NULL, beta = FALSE, gamma = FALSE)
+data.sesh
+data.ramalsesh <- forecast(data.sesh, h = 25)
+data.ramalsesh
+```
+Sementara pada fungsi HoltWinters, diperoleh nilai tengah peramalan JUGA berada di angka 37.22. Nilai alpha optimum yang diperoleh dari fungsi HoltWinters adalah 0.62.
+
+## Visualisasi Data Aktual, Pemulusan, dan Peramalan
+### Fungsi SES
+```{r}
+autoplot(data.ses) + 
+  autolayer(fitted(data.ses), series="Fitted") + 
+  xlab("Periode Waktu") + ylab("Konsentrasi PM10") +
+  ggtitle("SES alpha=0.2 Data Kualitas Udara Jakarta") + theme_bw() + theme(legend.position = "bottom")
+```
+
+### Fungsi HoltWinters
+```{r}
+plot(data.sesh)
+```
+
+## Akurasi Data Train
+```{r}
+SSEtrainsesh <- data.sesh$SSE
+MSEtrainsesh <- SSEtrainsesh/length(train.ts)
+RMSEtrainsesh <- sqrt(MSEtrainsesh)
+
+akurasitrainsesh <- matrix(c(SSEtrainsesh, MSEtrainsesh, RMSEtrainsesh))
+rownames(akurasitrainsesh) <- c("SSE", "MSE", "RMSE")
+colnames(akurasitrainsesh) <- c("Akurasi Data Train SES alpha optimum")
+akurasitrainsesh
+```
+
+## Akurasi Data Test
+```{r}
+eopt <- as.numeric(data.ramalsesh$mean)[1:25]- as.numeric(testing.ts$pm10)
+SSEtestsesh <- sum(eopt^2,  na.rm = TRUE)
+MSEtestsesh  <- mean(eopt^2, na.rm = TRUE)
+RMSEtestsesh <- sqrt(MSEtestsesh)
+
+akurasitestsesh <- matrix(c(SSEtestsesh, MSEtestsesh, RMSEtestsesh))
+rownames(akurasitestsesh) <- c("SSE", "MSE", "RMSE")
+colnames(akurasitestsesh) <- c("Akurasi Data Test SES alpha optimum")
+akurasitestsesh
+```
+## Akurasi Gabungan
+```{r}
+akurasiseshgab <- accuracy(data.ramalsesh, testing.ts$pm10)
+akurasiseshgab
+```
+
+# Double Exponential Smoothing
+## Pemulusan dan Peramalan dengan DES alpha dan beta optimum
+### Fungsi HoltWinters
+```{r}
+data.desh <- HoltWinters(train.ts, alpha = NULL, beta = NULL, gamma = FALSE)
+data.desh
+data.ramaldesh <- forecast(data.desh, h = 25)
+data.ramaldesh
+```
+Data pemulusan dan peramalan dengan double exponential smoothing (DES) menggunakan alpha dan beta optimum yang diperoleh dari fungsi HoltWinters(). Nilai alpha optimum yang diperoleh adalah 0.66, sedangkan nilai beta optimum adalah 0.01.
+
+## Visualisasi Data Aktual, Pemulusan, dan Peramalan
+```{r}
+plot(data.desh)
+```
+## Akurasi Data Train
+```{r}
+SSEtraindesh <- data.desh$SSE
+MSEtraindesh <- SSEtraindesh/length(train.ts)
+RMSEtraindesh <- sqrt(MSEtraindesh)
+
+akurasitraindesh <- matrix(c(SSEtraindesh, MSEtraindesh, RMSEtraindesh))
+rownames(akurasitraindesh) <- c("SSE", "MSE", "RMSE")
+colnames(akurasitraindesh) <- c("Akurasi Data Train DES alpha dan beta optimum")
+akurasitraindesh
+```
+
+## Akurasi Data Test
+```{r}
+eopt2 <- as.numeric(data.ramaldesh$mean)[1:25]- as.numeric(testing.ts$pm10)
+SSEtestdesh <- sum(eopt2^2,  na.rm = TRUE)
+MSEtestdesh  <- mean(eopt2^2, na.rm = TRUE)
+RMSEtestdesh <- sqrt(MSEtestdesh)
+
+akurasitestdesh <- matrix(c(SSEtestdesh, MSEtestdesh, RMSEtestdesh))
+rownames(akurasitestdesh) <- c("SSE", "MSE", "RMSE")
+colnames(akurasitestdesh) <- c("Akurasi Data Test DES alpha dan beta optimum")
+akurasitestdesh
+```
+
+## Akurasi Gabungan
+```{r}
+akurasideshgab <- accuracy(data.ramaldesh, testing.ts$pm10)
+akurasideshgab
+```
+
+
+# Perbandingan Hasil Peramalan (MSE)
+```{r}
+akurasitrain <- cbind(akurasitrainsma[2,1],akurasitraindma[2,1],akurasitrainsesh[2,1],akurasitraindesh[2,1])
+akurasitest <- cbind(akurasitestsma[2,1],akurasitestdma[2,1],akurasitestsesh[2,1],akurasitestdesh[2,1])
+
+perbandinganmse <- rbind(akurasitrain, akurasitest)
+rownames(perbandinganmse) <- c("MSE Data Train", "MSE Data Test")
+colnames(perbandinganmse) <- c("SMA n=5", "DMA n=5", "SES alpha optimum", "DES alpha dan beta optimum")
+perbandinganmse
+```
+
+Dari semua metode yang saya gunakan, setelah dibandingkan dengan MSE, diperoleh bahwa metode yang lebih baik adalah SES Holtwinters pada data train dan DES Holtwinters pada data test. Hal ini karena kedua metode tersebut menghasilkan nilai MSE yang paling kecil dibandingkan metode lainnya.
+
+Meski begitu, nilai MSE nya masih terbilang tinggi, sehingga model yang dihasilkan belum bisa dikatakan baik. Hal ini mungkin saja karena
+
+1. Data yang digunakan merupakan hasil cut dari banyak data lain, mungkin saja pemotongannya kurang pas
+
+2. Metode yang digunakan kurang cocok dengan pola data aktualnya
+
+3. Penentuan pembagian data train dan test kurang optimal
+
+4. Faktor lain yang belum saya pelajari
