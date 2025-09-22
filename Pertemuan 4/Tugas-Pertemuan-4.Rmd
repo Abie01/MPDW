@@ -1,0 +1,384 @@
+---
+title: "Pertemuan 4 - AR/MA"
+author: Abie Septian G1401231069
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+# MA(2)
+
+## Pembangkitan Data
+```{r}
+# SEED
+set.seed(1069)
+white<-rnorm(300)
+```
+
+```{r}
+# MA(2) Manual
+ma2<-white[c(1,2)]
+
+for(i in 3:300){
+  ma2[i]<-white[i]+0.4*white[i-1]+0.6*white[i-2]
+}
+ma2
+
+# MA(2) dengan fungsi arima.sim
+ma2_sim <- arima.sim(list(order=c(0,0,2), ma=c(0.4,0.6)), n=300)
+ma2_sim
+```
+
+## Plot time series
+```{r}
+# MA (2) Manual
+ts.plot(ma2, main="MA(2) Manual", col="blue")
+
+# MA (2) fungsi arima.sim
+ts.plot(ma2_sim, main="MA(2) arima.sim", col="red")
+```
+
+## Plot ACF dan PACF
+```{r}
+# ACF dan PACF MA(2) Manual
+par(mfrow=c(1,2))
+acf(ma2, main="ACF MA(2) Manual")
+pacf(ma2, main="PACF MA(2) Manual")
+
+# ACF dan PACF MA(2) arima.sim
+par(mfrow=c(1,2))
+acf(ma2_sim, main="ACF MA(2) arima.sim")
+pacf(ma2_sim, main="PACF MA(2) arima.sim")
+```
+
+Dari plot ACF, terlihat kedua model ma(2) baik yang manual maupun fungsi arima.sim sama-sama cuts off di lag 2, sedangkan pada plot PACF menunjukkan pola yang cenderung tails off. Hal ini mengindikasikan bahwa model merupakan moving average dengan q=2 sehingga model ini merupakan model yang stasioner.
+
+## Plot EACF
+```{r}
+# EACF MA(2) Manual
+TSA::eacf(ma2)
+
+# EACF MA(2) arima.sim
+TSA::eacf(ma2_sim)
+```
+
+Dari plot EACF, terlihat kedua model ma(2) baik yang manual maupun fungsi arima.sim sama-sama menunjukkan pola segitiga nol berada pada ordo AR(0) dan ordo MA(2). Hal ini mengindikasikan bahwa model merupakan moving average dengan q=2.
+
+## Scatterplot antar Lag
+```{r}
+# Scatterplot Autokorelasi MA(2) Manual
+
+## Yt-1 vs Yt
+yt1.ma2 <- ma2[-length(ma2)]
+plot(y=ma2[-1], x=yt1.ma2, main="Scatterplot Yt-1 vs Yt MA(2) Manual",col="blue",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.ma2 <- ma2[-c(length(ma2), length(ma2)-1)]
+plot(y=ma2[-c(1,2)], x=yt2.ma2, main="Scatterplot Yt-2 vs Yt MA(2) Manual",col="blue",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.ma2 <- ma2[-c(length(ma2), length(ma2)-1, length(ma2)-2)]
+plot(y=ma2[-c(1,2,3)], x=yt3.ma2, main="Scatterplot Yt-3 vs Yt MA(2) Manual",col="blue",xlab="Yt-3",ylab="Yt")
+```
+
+```{r}
+# Scatterplot Autokorelasi MA(2) arima.sim
+
+## Yt-1 vs Yt
+yt1.ma2_sim <- ma2_sim[-length(ma2_sim)]
+plot(y=ma2_sim[-1], x=yt1.ma2_sim, main="Scatterplot Autokorelasi MA(2) arima.sim",col="red",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.ma2_sim <- ma2_sim[-c(length(ma2_sim), length(ma2_sim)-1)]
+plot(y=ma2_sim[-c(1,2)], x=yt2.ma2_sim, main="Scatterplot Yt-2 vs Yt MA(2) arima.sim",col="red",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.ma2_sim <- ma2_sim[-c(length(ma2_sim), length(ma2_sim)-1, length(ma2_sim)-2)]
+plot(y=ma2_sim[-c(1,2,3)], x=yt3.ma2_sim, main="Scatterplot Yt-3 vs Yt MA(2) arima.sim",col="red",xlab="Yt-3",ylab="Yt")
+```
+
+Kedua model MA(2) baik yang manual maupun fungsi arima.sim menunjukkan pola yang cenderung positif linier pada lag 1 dan 2 yang mengindikasikan adanya autokorelasi positif, sementara cenderung tidak berkorelasi pada lag 3.
+
+## Autokorelasi Data vs Teoretis
+```{r}
+# Autokorelasi MA(2) Manual
+cat("Autokorelasi MA(2) Manual\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(ma2[-1], yt1.ma2), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(ma2[-c(1,2)], yt2.ma2), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(ma2[-c(1,2,3)], yt3.ma2), "\n")
+
+# Autokorelasi MA(2) arima.sim
+cat("\nAutokorelasi MA(2) arima.sim\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(ma2_sim[-1], yt1.ma2_sim), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(ma2_sim[-c(1,2)], yt2.ma2_sim), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(ma2_sim[-c(1,2,3)], yt3.ma2_sim), "\n")
+```
+
+Autokorelasi teoretis:
+$$ \rho_1 = \frac{-\theta_1+\theta_1\theta_2}{1+{(-\theta_1)^2}+{(-\theta_2)^2}} = \frac{-(-0.4)+(-0.4)(-0.6)}{1+(-0.4)^2+(-0.6)^2} \approx 0.421 $$
+
+
+$$ \rho_2 = \frac{-\theta_2}{1+{(-\theta_1)^2}+{(-\theta_2)^2}} = \frac{-(-0.6)}{1+(-0.4)^2+(-0.6)^2} \approx 0.395 $$
+
+$$ \rho_k = 0, k>2 $$
+
+Ketiga nilai autokorelasi baik yang dihitung dari data maupun nilai teoritis menunjukkan hasil yang cukup mirip, yaitu pada lag 1 sekitar 0.42, lag 2 sekitar 0.39, dan lag 3 mendekati 0.
+
+# AR(2)
+
+## Pembangkitan Data
+```{r}
+# AR(2) Manual
+set.seed(1069)
+ar2<-numeric(300)
+ar2[c(1,2)]<-1
+
+for(i in 3:300){
+  ar2[i]<-0.5*ar2[i-1]+0.2*ar2[i-2]+white[i]
+}
+ar2
+
+# AR(2) dengan fungsi arima.sim
+ar2_sim <- arima.sim(list(order=c(2,0,0), ar=c(0.5,0.2)), n=300)
+ar2_sim
+```
+
+## Plot time series
+```{r}
+# AR (2) Manual
+ts.plot(ar2, main="MA(2) Manual", col="blue")
+
+# AR (2) fungsi arima.sim
+ts.plot(ar2_sim, main="MA(2) arima.sim", col="red")
+```
+
+## Plot ACF dan PACF
+```{r}
+# ACF dan PACF AR(2) Manual
+par(mfrow=c(1,2))
+acf(ar2, main="ACF AR(2) Manual")
+pacf(ar2, main="PACF AR(2) Manual")
+
+# ACF dan PACF Ar(2) arima.sim
+par(mfrow=c(1,2))
+acf(ar2_sim, main="ACF AR(2) arima.sim")
+pacf(ar2_sim, main="PACF AR(2) arima.sim")
+```
+
+Dari plot ACF, terlihat kedua model ar(2) baik yang manual maupun fungsi arima.sim sama-sama tails off, sedangkan pada plot PACF menunjukkan pola yang cuts off di lag 2. Hal ini mengindikasikan bahwa model merupakan autoregressive dengan p=2 sehingga model ini merupakan model yang stasioner.
+
+## Plot EACF
+```{r}
+# EACF Ar(2) Manual
+TSA::eacf(ar2)
+
+# EACF AR(2) arima.sim
+TSA::eacf(ar2_sim)
+```
+
+Dari plot EACF, terlihat kedua model ar(2) baik yang manual maupun fungsi arima.sim sama-sama menunjukkan pola segitiga nol berada pada ordo MA(0) dan ordo AR(2). Hal ini mengindikasikan bahwa model merupakan autoregressive dengan p=2.
+
+## Scatterplot antar Lag
+```{r}
+# Scatterplot Autokorelasi AR(2) Manual
+
+## Yt-1 vs Yt
+yt1.ar2 <- ar2[-length(ar2)]
+plot(y=ar2[-1], x=yt1.ar2, main="Scatterplot Yt-1 vs Yt AR(2) Manual",col="blue",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.ar2 <- ar2[-c(length(ar2), length(ar2)-1)]
+plot(y=ar2[-c(1,2)], x=yt2.ar2, main="Scatterplot Yt-2 vs Yt AR(2) Manual",col="blue",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.ar2 <- ar2[-c(length(ar2), length(ar2)-1, length(ar2)-2)]
+plot(y=ar2[-c(1,2,3)], x=yt3.ar2, main="Scatterplot Yt-3 vs Yt AR(2) Manual",col="blue",xlab="Yt-3",ylab="Yt")
+```
+
+```{r}
+# Scatterplot Autokorelasi AR(2) arima.sim
+
+## Yt-1 vs Yt
+yt1.ar2_sim <- ar2_sim[-length(ar2_sim)]
+plot(y=ar2_sim[-1], x=yt1.ar2_sim, main="Scatterplot Autokorelasi AR(2) arima.sim",col="red",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.ar2_sim <- ar2_sim[-c(length(ar2_sim), length(ar2_sim)-1)]
+plot(y=ar2_sim[-c(1,2)], x=yt2.ar2_sim, main="Scatterplot Yt-2 vs Yt AR(2) arima.sim",col="red",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.ar2_sim <- ar2_sim[-c(length(ar2_sim), length(ar2_sim)-1, length(ar2_sim)-2)]
+plot(y=ar2_sim[-c(1,2,3)], x=yt3.ar2_sim, main="Scatterplot Yt-3 vs Yt AR(2) arima.sim",col="red",xlab="Yt-3",ylab="Yt")
+```
+
+Kedua model MA(2) baik yang manual maupun fungsi arima.sim menunjukkan pola yang cenderung positif linier pada ketiga lag, hanya saja semakin besar lag-nya, kekuatan hubungannya nampak semakin berkurang.
+
+## Autokorelasi Data vs Teoretis
+```{r}
+# Autokorelasi AR(2) Manual
+cat("Autokorelasi AR(2) Manual\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(ar2[-1], yt1.ar2), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(ar2[-c(1,2)], yt2.ar2), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(ar2[-c(1,2,3)], yt3.ar2), "\n")
+
+# Autokorelasi AR(2) arima.sim
+cat("\nAutokorelasi AR(2) arima.sim\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(ar2_sim[-1], yt1.ar2_sim), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(ar2_sim[-c(1,2)], yt2.ar2_sim), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(ar2_sim[-c(1,2,3)], yt3.ar2_sim), "\n")
+```
+
+Autokorelasi teoretis:
+$$ \rho_1 = \frac{\phi_1}{1-\phi_2}=\frac{0.5}{1-0.2} = 0.625 $$
+
+
+$$ \rho_2 = \phi_1\rho_1+\phi_2\rho_0 = \frac{\phi_1^2+\phi_2(1-\phi_2)}{1-\phi_2}=\frac{(0.5)^2+0.2(1-0.2)}{1-0.2} = 0.5125 $$
+
+$$ \rho_3 = \phi_1\rho_2+\phi_2\rho_1 + \phi_3\rho_0 = (0.5)(0.5125)+(0.2)(0.625)=0.38125$$
+
+Ketiga nilai autokorelasi baik yang dihitung dari data maupun nilai teoritis menunjukkan hasil yang cukup mirip, yaitu pada lag 1 sekitar 0.625, lag 2 sekitar 0.5125, dan lag 3 sekitar 0.38125. Iterasi ini akan terus berlanjut pada lag-lag berikutnya dengan nilai yang akan sangat mendekati 0.
+
+# ARMA(2,2)
+
+## Pembangkitan Data
+```{r}
+# ARMA(2,2) Manual
+set.seed(1069)
+arma.sim <- function(n, macoef, arcoef){
+  manum <- length(macoef)
+  arnum <- length(arcoef)
+  stopifnot(manum < n & arnum < n)
+  
+  wn <- rnorm(n, sd = 1)
+  init <- max(manum, arnum)
+
+  arma <- wn[1:init]
+  for(i in {init+1}:n){
+   mastart <- i - manum
+   maend <- i-1
+   arstart <- i - arnum
+   arend <- i-1
+   arma[i] <- sum(arcoef * arma[arstart:arend]) + sum(macoef * wn[mastart:maend])  + wn[i]
+   }
+  return(arma)
+}
+arma22 <- arma.sim(300, c(0.4,0.6), c(0.5,0.2))
+arma22
+
+# ARMA(2,2) dengan fungsi arima.sim
+arma22_sim <- arima.sim(list(order=c(2,0,2), ar=c(0.5,0.2), ma=c(0.6,0.4)), n=300)
+arma22_sim
+```
+
+## Plot time series
+```{r}
+# ARMA (2,2) Manual
+ts.plot(arma22, main="ARMA(2,2) Manual", col="blue")
+
+# ARMA (2,2) fungsi arima.sim
+ts.plot(arma22_sim, main="AR2,2) arima.sim", col="red")
+```
+
+## Plot ACF dan PACF
+```{r}
+# ACF dan PACF ARMA(2,2) Manual
+par(mfrow=c(1,2))
+acf(arma22, main="ACF ARMA(2,2) Manual")
+pacf(arma22, main="PACF ARMA(2,2) Manual")
+
+# ACF dan PACF ARMA(2,2) arima.sim
+par(mfrow=c(1,2))
+acf(arma22_sim, main="ACF ARMA(2,2) arima.sim")
+pacf(arma22_sim, main="PACF AR(2,2) arima.sim")
+```
+
+Dari plot ACF dan PAC, terlihat kedua model arma(2,2) baik yang manual maupun fungsi arima.sim sama-sama tails off. Hal ini mengindikasikan bahwa model telah sesuai dengan teori yang ada
+## Plot EACF
+```{r}
+# EACF ARMA(2,2) Manual
+TSA::eacf(arma22)
+
+# EACF ARMA(2,2) arima.sim
+TSA::eacf(arma22_sim)
+```
+
+Dari plot EACF, terlihat kedua model arma(2,2) baik yang manual maupun fungsi arima.sim sama-sama menunjukkan pola segitiga nol berada pada ordo MA(2) dan ordo AR(2).
+
+## Scatterplot antar Lag
+```{r}
+# Scatterplot Autokorelasi ARMA(2,2) Manual
+
+## Yt-1 vs Yt
+yt1.arma22 <- arma22[-length(arma22)]
+plot(y=arma22[-1], x=yt1.arma22, main="Scatterplot Yt-1 vs Yt AR(2) Manual",col="blue",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.arma22 <- arma22[-c(length(arma22), length(arma22)-1)]
+plot(y=arma22[-c(1,2)], x=yt2.arma22, main="Scatterplot Yt-2 vs Yt AR(2) Manual",col="blue",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.arma22 <- arma22[-c(length(arma22), length(arma22)-1, length(arma22)-2)]
+plot(y=arma22[-c(1,2,3)], x=yt3.arma22, main="Scatterplot Yt-3 vs Yt AR(2) Manual",col="blue",xlab="Yt-3",ylab="Yt")
+```
+
+```{r}
+# Scatterplot Autokorelasi ARMA(2,2) arima.sim
+
+## Yt-1 vs Yt
+yt1.arma22_sim <- arma22_sim[-length(arma22_sim)]
+plot(y=arma22_sim[-1], x=yt1.arma22_sim, main="Scatterplot Autokorelasi AR(2) arima.sim",col="red",xlab="Yt-1",ylab="Yt")
+## Yt-2 vs Yt
+yt2.arma22_sim <- arma22_sim[-c(length(arma22_sim), length(arma22_sim)-1)]
+plot(y=arma22_sim[-c(1,2)], x=yt2.arma22_sim, main="Scatterplot Yt-2 vs Yt AR(2) arima.sim",col="red",xlab="Yt-2",ylab="Yt")
+## Yt-3 vs Yt
+yt3.arma22_sim <- arma22_sim[-c(length(arma22_sim), length(arma22_sim)-1, length(arma22_sim)-2)]
+plot(y=arma22_sim[-c(1,2,3)], x=yt3.arma22_sim, main="Scatterplot Yt-3 vs Yt AR(2) arima.sim",col="red",xlab="Yt-3",ylab="Yt")
+```
+
+Kedua model ARMA(2,2) baik yang manual maupun fungsi arima.sim menunjukkan pola yang cenderung positif linier pada ketiga lag, hanya saja semakin besar lag-nya, kekuatan hubungannya nampak semakin melemah.
+
+## Autokorelasi Data vs Teoretis
+```{r}
+# Autokorelasi ARMA(2,2) Manual
+cat("Autokorelasi ARMA(2,2) Manual\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(arma22[-1], yt1.arma22), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(arma22[-c(1,2)], yt2.arma22), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(arma22[-c(1,2,3)], yt3.arma22), "\n")
+
+# Autokorelasi ARMA(2,2) arima.sim
+cat("\nAutokorelasi ARMA(2,2) arima.sim\n")
+# Yt-Yt-1
+cat("rho_1 =", cor(arma22_sim[-1], yt1.arma22_sim), "\n")
+# Yt-Yt-2
+cat("rho_2 =",cor(arma22_sim[-c(1,2)], yt2.arma22_sim), "\n")
+# Yt-Yt-3
+cat("rho_3 =",cor(arma22_sim[-c(1,2,3)], yt3.arma22_sim), "\n")
+```
+
+Autokorelasi teoretis:
+$$ \psi_1 = \phi_1+\theta_1= 0.5+0.4=0.9  $$
+$$ \psi_2 = \phi_1\psi_1+\phi_2+\theta_2= (0.5)(0.9)+0.2+0.6=1.25 $$
+$$ \psi_3 = \phi_1\psi_2+\phi_2\psi_1= (0.5)(1.25)+(0.2)(0.9)=0.805 $$
+$$ \gamma_k = \sigma^2\sum_{j=0}^{\infty}\psi_j\psi_{j+k} $$
+$$ \rho_k = \frac{\gamma_k}{\gamma_0} $$
+
+
+$$ \rho_2 = \phi_1\rho_1+\phi_2\rho_0 = \frac{\phi_1^2+\phi_2(1-\phi_2)}{1-\phi_2}=\frac{(0.5)^2+0.2(1-0.2)}{1-0.2} = 0.5125 $$
+
+$$ \rho_3 = \phi_1\rho_2+\phi_2\rho_1 + \phi_3\rho_0 = (0.5)(0.5125)+(0.2)(0.625)=0.38125$$
+Karena perhitungan tersebut memuat iterasi sebanyak takhingga, jadi saya langsung menampilkan aproksimasi hasilnya saja:
+$$ \rho_1 \approx 0.859 $$
+$$ \rho_2 \approx 0.749 $$
+$$ \rho_3 \approx 0.546 $$
+
+Ketiga nilai autokorelasi baik yang dihitung dari data maupun nilai teoritis menunjukkan hasil yang cukup mirip, yaitu pada lag 1 sekitar 0.625, lag 2 sekitar 0.5125, dan lag 3 sekitar 0.38125. Iterasi ini akan terus berlanjut pada lag-lag berikutnya dengan nilai yang akan sangat mendekati 0.
+
