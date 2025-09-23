@@ -369,7 +369,7 @@ $$ \psi_k = \theta_k + \sum_{i=1}^{min(p,k)}\phi_i\psi_{k-i} $$
 dengan :
 $$\theta_k = 0, \forall k > q$$
 $$\phi_i = 0, \forall i > p$$
-$$\psi_k = 0$$
+$$\psi_0 = 1$$
 $$ \gamma_k = \sigma^2\sum_{j=0}^{\infty}\psi_j\psi_{j+k} $$
 $$ \rho_k = \frac{\gamma_k}{\gamma_0} $$
 Karena perhitungan tersebut memuat iterasi sebanyak takhingga, jadi saya langsung menampilkan aproksimasi hasilnya saja:
