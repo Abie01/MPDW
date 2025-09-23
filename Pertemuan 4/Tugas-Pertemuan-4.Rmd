@@ -88,7 +88,7 @@ plot(y=ma2[-c(1,2,3)], x=yt3.ma2, main="Scatterplot Yt-3 vs Yt MA(2) Manual",col
 
 ## Yt-1 vs Yt
 yt1.ma2_sim <- ma2_sim[-length(ma2_sim)]
-plot(y=ma2_sim[-1], x=yt1.ma2_sim, main="Scatterplot Autokorelasi MA(2) arima.sim",col="red",xlab="Yt-1",ylab="Yt")
+plot(y=ma2_sim[-1], x=yt1.ma2_sim, main="Scatterplot Yt-1 vs Yt MA(2) arima.sim",col="red",xlab="Yt-1",ylab="Yt")
 ## Yt-2 vs Yt
 yt2.ma2_sim <- ma2_sim[-c(length(ma2_sim), length(ma2_sim)-1)]
 plot(y=ma2_sim[-c(1,2)], x=yt2.ma2_sim, main="Scatterplot Yt-2 vs Yt MA(2) arima.sim",col="red",xlab="Yt-2",ylab="Yt")
@@ -365,17 +365,59 @@ cat("rho_3 =",cor(arma22_sim[-c(1,2,3)], yt3.arma22_sim), "\n")
 ```
 
 Autokorelasi teoretis:
-$$ \psi_1 = \phi_1+\theta_1= 0.5+0.4=0.9  $$
-$$ \psi_2 = \phi_1\psi_1+\phi_2+\theta_2= (0.5)(0.9)+0.2+0.6=1.25 $$
-$$ \psi_3 = \phi_1\psi_2+\phi_2\psi_1= (0.5)(1.25)+(0.2)(0.9)=0.805 $$
+$$ \psi_k = \theta_k + \sum_{i=1}^{min(p,k)}\phi_i\psi_{k-i} $$
+dengan :
+$$\theta_k = 0, \forall k > q$$
+$$\phi_i = 0, \forall i > p$$
+$$\psi_k = 0$$
 $$ \gamma_k = \sigma^2\sum_{j=0}^{\infty}\psi_j\psi_{j+k} $$
 $$ \rho_k = \frac{\gamma_k}{\gamma_0} $$
-
-
-$$ \rho_2 = \phi_1\rho_1+\phi_2\rho_0 = \frac{\phi_1^2+\phi_2(1-\phi_2)}{1-\phi_2}=\frac{(0.5)^2+0.2(1-0.2)}{1-0.2} = 0.5125 $$
-
-$$ \rho_3 = \phi_1\rho_2+\phi_2\rho_1 + \phi_3\rho_0 = (0.5)(0.5125)+(0.2)(0.625)=0.38125$$
 Karena perhitungan tersebut memuat iterasi sebanyak takhingga, jadi saya langsung menampilkan aproksimasi hasilnya saja:
+
+```{r}
+# Fungsi untuk menghitung ACF teoretis ARMA(2,2)
+arma22_acf <- function(phi, theta, sigma2 = 1, N = 200, maxlag = 10) {
+
+  if(length(phi) != 2 || length(theta) != 2) stop("phi and theta must be length-2 vectors")
+  phi1 <- phi[1]; phi2 <- phi[2]
+  theta1 <- theta[1]; theta2 <- theta[2]
+  
+  ar_roots <- polyroot(c(1, -phi1, -phi2))
+  if(any(Mod(ar_roots) <= 1)) {
+    warning("AR polynomial has a root inside or on unit circle: model may be non-stationary")
+  }
+  
+  psi <- numeric(N + 1)
+  psi[1] <- 1                      
+  if (N >= 1) psi[2] <- phi1 * psi[1] + theta1       
+  if (N >= 2) psi[3] <- phi1 * psi[2] + phi2 * psi[1] + theta2  
+  if (N >= 3) {
+    for(j in 4:(N+1)) {     
+      psi[j] <- phi1 * psi[j-1] + phi2 * psi[j-2]
+    }
+  }
+  
+  gamma_k <- function(k) {
+    Jmax <- N - k
+    s <- sum( psi[1:(Jmax+1)] * psi[(1+k):(Jmax+1+k)] )
+    return(sigma2 * s)
+  }
+  
+  gamma_vals <- sapply(0:maxlag, gamma_k)
+  rho_vals <- gamma_vals / gamma_vals[1]
+  names(rho_vals) <- paste0("rho", 0:maxlag)
+  return(list(psi = psi, gamma = gamma_vals, rho = rho_vals))
+}
+
+phi <- c(0.5, 0.2)
+theta <- c(0.4, 0.6)
+res <- arma22_acf(phi = phi, theta = theta, sigma2 = 1, N = 300, maxlag = 3)
+
+
+round(res$rho, 6)
+
+```
+
 $$ \rho_1 \approx 0.859 $$
 $$ \rho_2 \approx 0.749 $$
 $$ \rho_3 \approx 0.546 $$
