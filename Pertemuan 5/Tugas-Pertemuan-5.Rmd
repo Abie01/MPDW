@@ -1,0 +1,187 @@
+---
+title: "Tugas Pertemuan 5"
+author: "Abie"
+date: "2025-09-28"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r, message=FALSE, warning=FALSE}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+library("rio")
+library("ggplot2")
+```
+
+# Data
+```{r}
+dataaqi<-read.csv("C:\\Users\\Abie\\OneDrive\\Documents\\5\\mpdw\\dataudarajkt.csv")
+dataaqi<-dataaqi[1:125,c(1,4)] # Periode 1 sampai 125
+dataaqi$periode<-seq(125)
+dataaqi<-dataaqi[,c("periode","tanggal","pm10")]
+head(dataaqi)
+```
+
+# Plot Data Time Series
+```{r}
+dataaqi.ts<-ts(dataaqi$pm10)
+ts.plot(dataaqi.ts, xlab="Periode Waktu", ylab="PM10")
+```
+Dari plot di atas, secara eksploratif terlihat bahwa nilai tengahnya tidak menetap pada satu nilai (cenderung tren) dan amplitudo fluktuasinya juga tidak konstan, sehingga dugaan awalnya adalah data tidak stasioner baik dalam rataan maupun ragam. Namun, untuk memastikannya, perlu dilakukan beberapa pemeriksaan lebih lanjut
+
+# Pemeriksaan Stasioneritas Data
+## Stasioneritas Rataan
+### Plot ACF
+```{r}
+acf(dataaqi.ts)
+```
+Dari plot ACF di atas, terlihat bahwa ACF menurun perlahan, cenderung membentuk pola tails off yang cukup panjang. ACF juga baru signifikan di sekitar lag 20. Dari plot ini diindikasikan bahwa data tidak stasioner dalam rataan atau dengan kata lain data memiliki tren, tetapi harus divalidasi lebih lanjut lagi dengan uji ADF untuk memastikannya.
+
+### Uji ADF
+```{r}
+tseries::adf.test(dataaqi.ts)
+```
+Berdasarkan uji ADF tersebut, didapat p-value sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak H0 dan menandakan bahwa data stasioner dalam rataan. Hasil uji ini kontradiktif dengan eksplorasi pada plot time series dan ACF yang sudah dilakukan. Oleh karena itu, data akan diperlakukan dengan 2 opsi berbeda, didifferencing dan tidak. Hal ini hanya untuk membandingkan bagaimana data akhir nantinya
+
+## Stasioneritas Ragam
+### Plot Box-Cox
+```{r}
+library(MASS)
+bc <- boxcox(
+  dataaqi.ts ~ dataaqi$periode,
+  lambda = seq(-1, 4, by = 0.01)
+)
+
+lambda <- bc$x[which.max(bc$y)]
+lambda
+# Selang kepercayaan 95% untuk lambda
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lower <- min(ci_lambda)
+ci_upper <- max(ci_lambda)
+
+c(Batas_Bawah = ci_lower, Batas_Atas = ci_upper)
+```
+Hasil uji Box–Cox menunjukkan bahwa nilai λ optimum adalah 1.99 dengan interval kepercayaan 95% sebesar (1,42–2,58). Karena selang tersebut tidak memuat nilai λ = 1, maka dapat disimpulkan bahwa data tidak stasioner dalam ragam sehingga diperlukan transformasi. Untuk mempermudah transformasi, akan digunakan λ = 2 sehingga y* = $y^2$
+
+
+# Penanganan Ketidakstasioneran data
+Karena sebelumnya akan dicoba dua opsi: differencing dan tidak, maka akan ada 3 skenario penanganan, yaitu:
+
+- Transformasi saja (rataan sudah stasioner)
+- Differencing lalu ditransformasi (rataan dan ragam belum stasioner)
+- Transformasi lalu didifferencing (rataan dan ragam belum stasioner)
+
+## Skenario Penanganan 1
+```{r}
+dataaqi$sp1<-dataaqi$pm10^2
+dataaqisp1.ts<-ts(dataaqi$sp1)
+```
+Hasil data jika ditransformasi saja tidak jauh berbeda dengan data awalnya. Selanjutnya akan diperiksa kembali stasioneritas rataan dan ragamnya.
+
+### Stasioneritas Rataan
+```{r}
+acf(dataaqisp1.ts)
+tseries::adf.test(dataaqisp1.ts)
+```
+
+Secara plot ACF, data masih cenderung menurun perlahan membentuk pola tails off yang mengindikasikan data belum stasioner, tetapi berdasarkan uji ADF, didapat p value < 0.05 yang artinya data sudah stasioner dalam rataan
+
+### Stasioneritas Ragam
+```{r}
+bcsp1 <- boxcox(
+  dataaqisp1.ts ~ dataaqi$periode,
+  lambda = seq(-1, 4, by = 0.01)
+)
+
+lambdasp1 <- bcsp1$x[which.max(bcsp1$y)]
+lambdasp1
+# Selang kepercayaan 95% untuk lambda
+ci_lambdasp1 <- bcsp1$x[bcsp1$y > max(bcsp1$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lowersp1 <- min(ci_lambdasp1)
+ci_uppersp1 <- max(ci_lambdasp1)
+
+c(Batas_Bawah = ci_lowersp1, Batas_Atas = ci_uppersp1)
+```
+
+Setelah transformasi, hasil uji Box–Cox menunjukkan bahwa nilai λ optimum adalah 0.99 dengan interval kepercayaan 95% sebesar (0,71–1,29). Karena selang tersebut memuat nilai λ = 1, maka dapat disimpulkan bahwa data sudah stasioner dalam ragam.
+
+## Skenario Penanganan 2
+### Differencing
+```{r}
+diffsp2<-diff(dataaqi.ts,differences = 1)
+ts.plot(diffsp2)
+```
+Setelah didifferencing sekali, terlihat data sudah bergerak pada nilai tengah/rataan yang konstan. Secara eksploratif, data ini seharusnya sudah stasioner dalam rataan.
+
+### Transformasi
+Sebelum ditransformasi box-cox, data perlu "digeser" karena box-cox mengharuskan data positif, sehingga seluruh amatan nilainya akan diubah menjadi: $y* = y - min(y) + 1$
+```{r}
+afterdiffsp2<-diffsp2-min(diffsp2)+1
+```
+
+```{r}
+bcsp2 <- boxcox(
+  afterdiffsp2 ~ dataaqi$periode[-max(dataaqi$periode)],
+  lambda = seq(-1, 4, by = 0.01)
+)
+
+lambdasp2 <- bcsp2$x[which.max(bcsp2$y)]
+lambdasp2
+# Selang kepercayaan 95% untuk lambda
+ci_lambdasp2 <- bcsp2$x[bcsp2$y > max(bcsp2$y) - 0.5 * qchisq(0.95, 1)]
+
+# Batas bawah dan batas atas
+ci_lowersp2 <- min(ci_lambdasp2)
+ci_uppersp2 <- max(ci_lambdasp2)
+
+c(Batas_Bawah = ci_lowersp2, Batas_Atas = ci_uppersp2)
+```
+
+Hasil uji Box–Cox menunjukkan bahwa nilai λ optimum adalah 1.05 dengan interval kepercayaan 95% sebesar (0,75–1,39). Karena selang tersebut memuat nilai λ = 1, maka dapat disimpulkan bahwa data sudah stasioner dalam ragam, sehingga tidak perlu transformasi lagi.
+
+### Stasioneritas Rataan
+```{r}
+acf(diffsp2)
+tseries::adf.test(diffsp2)
+```
+
+Pada plot ACF, terlihat pola yang langsung cuts off di lag 3, menandakan data sudah stasioner dalam rataan. Begitu pula dengan uji ADF yang signifikan pada taraf nyata 95%.
+
+## Skenario Penanganan 3
+### Transformasi
+Karena kita sudah punya hasil sebelumnya, artinya data sudah stasioner dalam ragam, jadi langsung dilanjutkan ke tahap differencing menggunakan data tersebut.
+```{r}
+ts.plot(dataaqisp1.ts)
+```
+
+```{r}
+diffsp3<-diff(dataaqisp1.ts,differences = 1)
+ts.plot(diffsp3)
+```
+### Stasioneritas Rataan
+```{r}
+acf(diffsp3)
+tseries::adf.test(diffsp3)
+```
+
+Pada plot ACF, terlihat pola yang langsung cuts off di lag 3, menandakan data stasioner dalam rataan. Begitu pula dengan uji ADF yang signifikan pada taraf nyata 95%.
+
+# Kesimpulan
+```{r}
+ts.plot(dataaqisp1.ts,main="Data Time Series dengan Skenario Penanganan 1",ylab="PM10",xlab="Periode Waktu")
+ts.plot(diffsp2,main="Data Time Series dengan Skenario Penanganan 2",ylab="PM10",xlab="Periode Waktu")
+ts.plot(diffsp3,main="Data Time Series dengan Skenario Penanganan 3",ylab="PM10",xlab="Periode Waktu")
+```
+
+Dari ketiga skenario diperoleh hasil ketiganya sudah stasioner dalam rataan dan ragam. Namun, secara plot time seriesnya, penanganan tanpa diferencing menghasilkan pola data yang cenderung memiliki tren meskipun uji ADF menunjukkan data stasioner
+
+
